@@ -1,11 +1,11 @@
-﻿using Google.Protobuf;
-
-using Grpc.Core;
+﻿using Grpc.Core;
 
 using GrpcGreeter;
 
 using System;
 using System.ComponentModel;
+using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 
 namespace gRPC
@@ -22,44 +22,24 @@ namespace gRPC
         }
     }
 
-    public class GrpcClient
+
+    [GrpcTools.SerializerModel]
+    public class RQ
     {
-        public readonly string ServiceName;
-        private readonly CallInvoker CallInvoker;
-        public GrpcClient(string ip, int port, string serviceName)
-        {
-            var channel = new Channel(ip, port, ChannelCredentials.Insecure);
-            CallInvoker = channel.CreateCallInvoker();
-        }
 
-        public TResponse CallUnary<TRequest, TResponse>(TRequest request, string apiName)
-            where TRequest : class
-            where TResponse : class
-        {
-            var requestMarshaller = CreateMarshaller<TRequest>();
-            var responseMarshaller = CreateMarshaller<TResponse>();
-            var method = new Method<TRequest, TResponse>(MethodType.Unary, ServiceName, apiName, requestMarshaller, responseMarshaller);
-            return CallInvoker.BlockingUnaryCall(method, null, default, request);
-        }
+        public string AA;
 
-        private Marshaller<T> CreateMarshaller<T>()
+        public static byte[] Serializer(RQ rQ)
         {
-            if(typeof(T) is IMessage)
+            return Encoding.ASCII.GetBytes(rQ.AA);
+        }
+        public static RQ Deserializer(byte[] bin)
+        {
+            return new RQ()
             {
-               return CreateIMessageMarshaller<T>();
-            }
+                AA = Encoding.ASCII.GetString(bin)
+            };
         }
-
-        private Marshaller<T> CreateIMessageMarshaller<T>()
-            where T : IMessage<T>, new()
-        {
-            var parse = new MessageParser<T>(() => new T());
-            return Marshallers.Create<T>(instance =>
-            {
-                return instance.ToByteArray();
-            },parse.ParseFrom);
-        }
-
     }
 
     internal class Program
@@ -71,24 +51,47 @@ namespace gRPC
             _ = Task.Run(async () =>
             {
                 await Task.Delay(1000);//等服務建立好
+                var client = new GrpcClient("127.0.0.1", 1234, "TestService");
+                var r = client.UnarySync<RQ, RQ>("Test3", new RQ() { AA = "Bantime" });
+                /*
                 var channel = new Channel("127.0.0.1", 1234, ChannelCredentials.Insecure);
                 var callInvoker = channel.CreateCallInvoker();
 
                 var response = callInvoker.BlockingUnaryCall(method, null, default, new byte[] { 1, 2, 3, 4 });
-                
+
                 var client = new Greeter.GreeterClient(channel);
                 var response = client.SayHello(new HelloRequest() { Name = "Bantime" });
-                Console.WriteLine($"Client Receive {response.Message}");
+                Console.WriteLine($"Client Receive {response.Message}");*/
             });
+            var grpcServer = new GrpcServer("TestService");
+            grpcServer.AddMethod<byte[], byte[]>("Test1", (rq, context) =>
+            {
+                return Task.FromResult(rq.Reverse().ToArray());
+            });
+            grpcServer.AddMethod<HelloRequest, HelloReply>("Test2", (rq, context) =>
+            {
+                return Task.FromResult(new HelloReply()
+                {
+                    Message = $"Hello {rq.Name}"
+                });
+            });
+            grpcServer.AddMethod<RQ, RQ>("Test3", (rq, context) =>
+            {
+                return Task.FromResult(new RQ() 
+                { 
+                    AA = $"Hello {rq.AA}"
+                });
+            });
+            /*
             var service = ServerServiceDefinition.CreateBuilder()
           .AddMethod(method, (bin, conteext) =>
           {
               Console.WriteLine(string.Join("-", bin));
               return Task.FromResult(bin);
-          }).Build();
+          }).Build();*/
             var server = new Server
             {
-                Services = { service },
+                Services = { grpcServer.CreateServer() },
                 Ports = { new ServerPort("localhost", 1234, ServerCredentials.Insecure) }
             };
             server.Start();
