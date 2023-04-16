@@ -40,10 +40,32 @@ namespace ToolTest
 {
     internal partial class Program
     {
+        public static void Boxing()
+        {
+            while(true)
+            {
+                var stopWatch = new Stopwatch();
+                stopWatch.Restart();
+                for (int i = 0; i < 100000;i++)
+                {
+                    var s = $"{i}";
+                }
+                Console.WriteLine(stopWatch.Elapsed);
+                stopWatch.Restart();
+                for (int i = 0; i < 100000; i++)
+                {
+                    var s = $"{i.ToString()}";
+                }
+                Console.WriteLine(stopWatch.Elapsed);
+
+                Console.WriteLine("-----------------");
+                Thread.Sleep(1000);
+            }
+        }
 
         static async Task Main(string[] args)
         {
-
+            Boxing();
             while (true)
             {
                 await Task.Delay(1000);
